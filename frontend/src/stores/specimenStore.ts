@@ -2,6 +2,13 @@ import { create } from 'zustand'
 import type { DetStatus, Specimen } from '@/types'
 import { db, deleteRow, loadAll, putRow, putRows } from '@/hooks/usePersistentStore'
 
+export interface BulkStatusResult {
+  /** 实际改了状态的标本数 */
+  updated: number
+  /** 因处于「待复核」而被跳过的标本 */
+  skipped: Specimen[]
+}
+
 export interface SpecimenState {
   rows: Specimen[]
   loaded: boolean
@@ -9,7 +16,7 @@ export interface SpecimenState {
   save: (row: Specimen) => Promise<void>
   saveMany: (rows: Specimen[]) => Promise<void>
   remove: (id: string) => Promise<void>
-  bulkSetStatus: (ids: string[], status: DetStatus) => Promise<void>
+  bulkSetStatus: (ids: string[], status: DetStatus) => Promise<BulkStatusResult>
   codes: () => string[]
 }
 
@@ -36,11 +43,16 @@ export const specimenStore = create<SpecimenState>((set, get) => ({
   },
   bulkSetStatus: async (ids, status) => {
     const targets = get().rows.filter((row) => ids.includes(row.id))
+    // 待复核标本只能由独立复核流程推进，批量改状态（含改成「已鉴定」或退回其它状态）一律拦截
+    const skipped = targets.filter((row) => row.status === '待复核')
+    const skippedIds = new Set(skipped.map((row) => row.id))
+    const allowed = targets.filter((row) => !skippedIds.has(row.id))
     await putRows<Specimen>(
       db.specimens,
-      targets.map((row) => ({ ...row, status }))
+      allowed.map((row) => ({ ...row, status }))
     )
     await get().hydrate()
+    return { updated: allowed.length, skipped }
   },
   codes: () => get().rows.map((row) => row.code)
 }))

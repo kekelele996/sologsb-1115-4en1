@@ -36,9 +36,18 @@ export default function SpecimensPage(): JSX.Element {
       setMessage('请先勾选要推进状态的标本')
       return
     }
-    await specimenStore.getState().bulkSetStatus(selected, batchStatus)
-    setMessage(`已把 ${selected.length} 份标本推进为「${batchStatus}」`)
-    setSelected([])
+    const result = await specimenStore.getState().bulkSetStatus(selected, batchStatus)
+    if (result.skipped.length > 0) {
+      const codes = result.skipped.map((item) => item.code).join('、')
+      setMessage(
+        result.updated > 0
+          ? `已把 ${result.updated} 份标本推进为「${batchStatus}」；${result.skipped.length} 份待复核标本被跳过（${codes}），须由另一名鉴定人完成独立复核后才能定名`
+          : `已选标本均处于「待复核」（${codes}），批量改状态被拦截：须由另一名鉴定人完成独立复核`
+      )
+    } else {
+      setMessage(`已把 ${result.updated} 份标本推进为「${batchStatus}」`)
+    }
+    setSelected((prev) => prev.filter((id) => !result.skipped.some((item) => item.id === id)))
   }
 
   const exportList = (): void => {
