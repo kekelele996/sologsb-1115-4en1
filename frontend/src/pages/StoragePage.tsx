@@ -39,6 +39,13 @@ export default function StoragePage(): JSX.Element {
       setWarning('请先在右侧选择或拖动一份未入柜标本')
       return
     }
+    const target = specimens.find((item) => item.id === specimenId)
+    // 待复核标本尚未定名，复核结束前不得入柜
+    if (target && target.status === '待复核') {
+      setWarning(`${codeOf(specimenId)} 仍处于「待复核」，须经他人独立复核并进入「已鉴定」后才能入柜`)
+      setDragging(null)
+      return
+    }
     const candidate: Storage = {
       id: storages.find((item) => item.specimenId === specimenId)?.id ?? uid('stg'),
       specimenId,
@@ -138,24 +145,42 @@ export default function StoragePage(): JSX.Element {
           <div className="panel">
             <h2 className="text-sm font-semibold text-slate-700">未入柜标本（拖到插位）</h2>
             <div className="mt-2 max-h-72 space-y-2 overflow-auto">
-              {unplaced.map((specimen) => (
-                <div
-                  key={specimen.id}
-                  draggable
-                  onDragStart={() => setDragging(specimen.id)}
-                  onDragEnd={() => setDragging(null)}
-                  onClick={() => setPicked(specimen.id)}
-                  className={`cursor-grab rounded-lg border px-3 py-2 text-xs transition ${
-                    picked === specimen.id ? 'border-field-500 bg-field-50' : 'border-slate-200 hover:bg-slate-50'
-                  }`}
-                >
-                  <p className="font-mono text-field-700">{specimen.code}</p>
-                  <p className="text-slate-600">{specimenTaxon(specimen)}</p>
-                  <p className="text-slate-400">
-                    {siteName(specimen.siteId)} · <StatusTag status={specimen.status} />
-                  </p>
-                </div>
-              ))}
+              {unplaced.map((specimen) => {
+                const blocked = specimen.status === '待复核'
+                return (
+                  <div
+                    key={specimen.id}
+                    draggable={!blocked}
+                    onDragStart={() => {
+                      if (!blocked) setDragging(specimen.id)
+                    }}
+                    onDragEnd={() => setDragging(null)}
+                    onClick={() => {
+                      if (blocked) {
+                        setWarning(`${specimen.code} 仍处于「待复核」，独立复核完成并定名前不能入柜`)
+                        setPicked('')
+                      } else {
+                        setPicked(specimen.id)
+                      }
+                    }}
+                    title={blocked ? '待复核标本须先完成独立复核' : undefined}
+                    className={`rounded-lg border px-3 py-2 text-xs transition ${
+                      blocked
+                        ? 'cursor-not-allowed border-dashed border-amber-300 bg-amber-50/60 opacity-70'
+                        : `cursor-grab ${
+                            picked === specimen.id ? 'border-field-500 bg-field-50' : 'border-slate-200 hover:bg-slate-50'
+                          }`
+                    }`}
+                  >
+                    <p className="font-mono text-field-700">{specimen.code}</p>
+                    <p className="text-slate-600">{specimenTaxon(specimen)}</p>
+                    <p className="text-slate-400">
+                      {siteName(specimen.siteId)} · <StatusTag status={specimen.status} />
+                    </p>
+                    {blocked ? <p className="mt-0.5 text-[11px] text-amber-700">待独立复核，暂不可入柜</p> : null}
+                  </div>
+                )
+              })}
               {unplaced.length === 0 ? <p className="text-xs text-slate-400">所有标本都已入柜</p> : null}
             </div>
           </div>

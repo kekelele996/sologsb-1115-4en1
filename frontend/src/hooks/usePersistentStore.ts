@@ -4,7 +4,7 @@ import Dexie, { type Table } from 'dexie'
 import type { CollectSite, Determination, Specimen, Storage } from '@/types'
 
 /** IndexedDB 数据结构版本号 */
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 export interface MetaRow {
   key: string
@@ -44,6 +44,28 @@ class InsectLogDb extends Dexie {
           .modify((specimen) => {
             if (!specimen.method) {
               specimen.method = '扫网'
+            }
+          })
+      })
+    // v3：鉴定记录新增「初鉴 / 复核」类型与复核结论一致性，补独立复核工作流
+    this.version(SCHEMA_VERSION)
+      .stores({
+        specimens: 'id, code, order, family, status, siteId, collectDate',
+        sites: 'id, code, name, habitat',
+        storages: 'id, specimenId, cabinet, drawer',
+        determinations: 'id, specimenId, determiner, date, kind',
+        meta: 'key'
+      })
+      .upgrade(async (tx) => {
+        await tx
+          .table<Determination, string>('determinations')
+          .toCollection()
+          .modify((record) => {
+            if (!record.kind) {
+              record.kind = '初鉴'
+            }
+            if (record.agreed === undefined) {
+              record.agreed = null
             }
           })
       })
@@ -224,7 +246,9 @@ export async function seedDemoData(): Promise<void> {
       conclusion: 'Carabus smaragdinus',
       reference: '《中国步甲志》第二卷 P.218',
       confidence: '高',
-      needReview: false
+      needReview: false,
+      kind: '初鉴',
+      agreed: null
     },
     {
       id: 'det_002',
@@ -234,7 +258,21 @@ export async function seedDemoData(): Promise<void> {
       conclusion: 'Noctuidae sp.',
       reference: '《中国蛾类图鉴》Vol.3',
       confidence: '中',
-      needReview: true
+      needReview: true,
+      kind: '初鉴',
+      agreed: null
+    },
+    {
+      id: 'det_003',
+      specimenId: 'sp_003',
+      determiner: '蓝澈',
+      date: today,
+      conclusion: 'Sympetrum frequens',
+      reference: '《中国蜻蜓图鉴》P.142，翅脉图版 27',
+      confidence: '中',
+      needReview: true,
+      kind: '初鉴',
+      agreed: null
     }
   ])
 
